@@ -26,7 +26,7 @@ use Win32::Process::List;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.000';
+my $VERSION = '1.001';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
@@ -37,6 +37,13 @@ $config->{_}->{'DefaultOpenDir'} //= File::Spec->catfile($ENV{'USERPROFILE'}, 'D
 $config->{_}->{'InstallDir'} //= File::Spec->catfile($ENV{'LOCALAPPDATA'}, 'GordonsReloadingTool');
 
 $config->write($config_file, 'utf8');
+
+my @configuration_files = (
+    'GordonsReloadingTool.cfg',
+    'plugins/GRTrace/GRTrace.cfg',
+    'plugins/GRTrace/plugin-grtrace.cfg',
+    'plugins/GRTLab/plugin-grtlab.cfg',
+);
 
 my $zip_file;
 my $install_dir = $config->{_}->{'InstallDir'};
@@ -225,16 +232,22 @@ sub install {
                         $status_text->text(sprintf('Installing...'));
                         $status_text->color(cl::Green);
                         $status_text->repaint();
-                        # Save configuration
-                        my $cfg = File::Spec->catfile($install_dir, 'GordonsReloadingTool.cfg');
-                        my $cfg_bak = File::Spec->catfile($install_dir, 'GordonsReloadingTool.cfg.update.' . $installed_version);
-                        if (-e $cfg) {
-                            File::Copy::copy($cfg => $cfg_bak);
+                        # Save configuration files
+                        foreach my $name (@configuration_files) {
+                            my $cfg = File::Spec->catfile($install_dir, $name);
+                            my $cfg_bak = File::Spec->catfile($install_dir, $name . '.update.' . $installed_version);
+                            if (-e $cfg) {
+                                File::Copy::copy($cfg => $cfg_bak);
+                            }
                         }
                         if ($zip->extractTree($root_dir => $install_dir) == Archive::Zip::AZ_OK) {
-                            # Restrore configuration file
-                            if (-e $cfg_bak) {
-                                File::Copy::move($cfg_bak => $cfg);
+                            # Restrore configuration files
+                            foreach my $name (@configuration_files) {
+                                my $cfg = File::Spec->catfile($install_dir, $name);
+                                my $cfg_bak = File::Spec->catfile($install_dir, $name . '.update.' . $installed_version);
+                                if (-e $cfg_bak) {
+                                    File::Copy::move($cfg_bak => $cfg);
+                                }
                             }
                             
                             $status_text->text(sprintf('Installation successful'));                
