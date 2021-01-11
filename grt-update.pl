@@ -255,7 +255,6 @@ sub install {
                             opendir my $DIR => $doku_dir;
                             my @lang_dirs = grep { -d $_ } map { File::Spec->catfile($doku_dir, $_) } grep { ! m!^\.!x } readdir $DIR;
                             closedir $DIR;
-                            say 'lang_dirs=', join '|', @lang_dirs;
 
                             foreach my $dir (@lang_dirs) {
                                 my $start_file = File::Spec->catfile($dir, 'report', 'start.txt');
