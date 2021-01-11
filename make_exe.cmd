@@ -2,7 +2,7 @@
 @for /f "usebackq tokens=*" %%a in (`grep -Eo "VERSION = '.*?'" grt-update.pl^|grep -Eo "[0-9].[0-9]+"`) do @set GRTU_VERSION=%%a
 @echo Version is %GRTU_VERSION%
 
-@call pp -S            ^
+@call pp -S --gui      ^
   -l zlib1__.dll       ^
   -l libXpm__.dll      ^
   -l libgomp-1.dll     ^
