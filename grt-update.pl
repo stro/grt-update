@@ -23,10 +23,11 @@ my $is_Win = $^O eq 'MSWin32';
 
 use Win32::File::VersionInfo;
 use Win32::Process::List;
+use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.001';
+my $VERSION = '1.002';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
@@ -51,7 +52,7 @@ my $installed_version = 0;
 
 my $window = Prima::MainWindow->new(
     text     => sprintf('GordonReloadingTool updater V%s', $VERSION),
-    size     => [ 600, 220],
+    size     => [ 600, 250],
     menuItems => [
                 [ '~File' => [
                         ['~Open ZIP File', 'Ctrl+O', '^O', sub { open_zip_file(shift) }],
@@ -98,9 +99,6 @@ my $status_text = Prima::Label->create(
     syncPaint => 1,
 );
 
-# Initial check of install dir, need to have status
-verify_install_dir($install_dir_text);
-
 my $button_install = Prima::Button->create(
     text => 'Install',
     pack => { fill => 'x', side => 'top', pad => 10 },
@@ -111,12 +109,24 @@ my $button_install = Prima::Button->create(
     syncPaint => 1,
 );
 
+my $button_shortcuts = Prima::Button->create(
+    text => 'Create desktop and quick launch icons',
+    pack => { fill => 'x', side => 'top', pad => 10 },
+    owner => $window,
+    onClick => sub { create_shortcuts(shift) },
+    enabled => 0,
+    syncPaint => 1,
+);
+
 my $button_exit = Prima::Button->create(
     text     => 'Exit',
     pack => { fill => 'x', side => 'top', pad => 10 },
     owner => $window,
     onClick  => sub { $::application-> close },
 );
+
+# Initial check of install dir, need to have status. Buttons should be declared before it runs.
+verify_install_dir($install_dir_text);
 
 run Prima;
 
@@ -171,6 +181,8 @@ sub verify_install_dir {
         if (-d $dir) {
             my $exe_file = File::Spec->catfile($dir, 'GordonsReloadingTool.exe');
             if (-e $exe_file) {
+                $button_shortcuts->enabled(1);
+
                 if (my $version = GetFileVersionInfo($exe_file)->{'FileVersion'}) {
                     $installed_version = substr($version, rindex($version, '.') + 1);
                 }
@@ -182,16 +194,19 @@ sub verify_install_dir {
                     $status_text->color(cl::LightRed);
                 }
             } else {
+                $button_shortcuts->enabled(0);
                 $status_text->text('Installation path is not empty, but has no installed version, proceed with caution');
                 $status_text->color(cl::LightRed);
             }
 
         } else {
+            $button_shortcuts->enabled(0);
             $status_text->text('Installation path is an existing file; cannot install');
             $status_text->color(cl::LightRed);
             return 0;
         }
     } else {
+        $button_shortcuts->enabled(0);
         $status_text->text('Installation path is empty, ready for new installation');
         $status_text->color(cl::Black);
     }
@@ -229,36 +244,54 @@ sub install {
                     my $zip = Archive::Zip->new();
                     if ($zip->read($zip_file) == Archive::Zip::AZ_OK) {
                         my $root_dir = shift(@{[$zip->members]})->fileName;
-                        $status_text->text(sprintf('Installing...'));
+                        $status_text->text(sprintf('Installing... Please wait.'));
                         $status_text->color(cl::Green);
                         $status_text->repaint();
+
+                        # Detect reports that need saving
+                        my @report_files;
+                        my $doku_dir = File::Spec->catfile($install_dir, 'doku');
+                        if (-d $doku_dir) {
+                            opendir my $DIR => $doku_dir;
+                            my @lang_dirs = grep { -d $_ } map { File::Spec->catfile($doku_dir, $_) } grep { ! m!^\.!x } readdir $DIR;
+                            closedir $DIR;
+                            say 'lang_dirs=', join '|', @lang_dirs;
+
+                            foreach my $dir (@lang_dirs) {
+                                my $start_file = File::Spec->catfile($dir, 'report', 'start.txt');
+                                push @report_files, substr($start_file, length($install_dir)) if -e $start_file; # Remove the install_dir part
+                            }
+                        }
+
                         # Save configuration files
-                        foreach my $name (@configuration_files) {
+                        foreach my $name (@configuration_files, @report_files) {
                             my $cfg = File::Spec->catfile($install_dir, $name);
                             my $cfg_bak = File::Spec->catfile($install_dir, $name . '.update.' . $installed_version);
                             if (-e $cfg) {
                                 File::Copy::copy($cfg => $cfg_bak);
                             }
                         }
+
                         if ($zip->extractTree($root_dir => $install_dir) == Archive::Zip::AZ_OK) {
                             # Restrore configuration files
-                            foreach my $name (@configuration_files) {
+                            foreach my $name (@configuration_files, @report_files) {
                                 my $cfg = File::Spec->catfile($install_dir, $name);
                                 my $cfg_bak = File::Spec->catfile($install_dir, $name . '.update.' . $installed_version);
                                 if (-e $cfg_bak) {
                                     File::Copy::move($cfg_bak => $cfg);
                                 }
                             }
-                            
                             $status_text->text(sprintf('Installation successful'));                
                             $status_text->color(cl::Black);
                             $status_text->repaint();
+                            $button_shortcuts->enabled(0);
                             return 1;
                         } else {
                             $status_text->text(sprintf('Error while installing. Please try again.'));                
                             $status_text->color(cl::LightRed);
                             $button_install->enabled(1);
                         }
+
                     } else {
                         $status_text->text(sprintf('ZIP file error. Please select another file'));
                         $status_text->color(cl::LightRed);
@@ -274,4 +307,18 @@ sub install {
         $status_text->color(cl::LightRed);
     }
     return 0;
+}
+
+sub create_shortcuts {
+    my $self = shift;
+
+    my $link = Win32::Shortcut->new();
+    $link->{'Path'} = File::Spec->catfile($install_dir, 'GordonsReloadingTool.exe');
+    $link->{'WorkingDirectory'} = $install_dir;
+    $link->{'Description'} = 'GordonsReloadingTool';
+    $link->Save(File::Spec->catfile($ENV{'USERPROFILE'}, 'Desktop', 'GordonsReloadingTool.lnk'));
+    $link->Save(File::Spec->catfile($ENV{'APPDATA'}, 'Microsoft/Internet Explorer/Quick Launch', 'GordonsReloadingTool.lnk'));
+    $link->Close();
+
+    return 1;
 }

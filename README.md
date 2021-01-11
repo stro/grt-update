@@ -14,7 +14,7 @@ A Win32 executable is provided so it can be run without Perl installed on a Wind
 
 Just run the exe file. 
 
-NOTE! As of January 2021, on Windows 7, a built-in anti-virus detects the executable as a generic Trojan. It's a false positive and it was submitted to Microsoft for review: https://www.microsoft.com/en-us/wdsi/submission/6c2ce48e-7b2b-4db3-92bc-7cd68c32a8b4
+Note that previous Windows Defender virus definitions could mark the executable file as a false positive. Make sure your virus definition is updated to at least 1.329.2017.0. If you encounter similar issue in the future, let me know so I can notify Microsoft.
 
 #### Using Strawberry Perl
 
@@ -51,3 +51,5 @@ The tool will not install when:
 * ZIP file is corrupted.
 
 As soon as everything is installed (it will take less than 10 seconds), you may click "Exit" or press Alt+X.
+
+If there's an existing installation (whether you already had GRT installed or just installed it new), you can also create desktop and quick launch icons by clicking a corresponding button.
