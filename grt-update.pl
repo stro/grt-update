@@ -27,7 +27,7 @@ use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.002';
+my $VERSION = '1.003';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
@@ -76,6 +76,7 @@ my $zip_file_text = Prima::InputLine->create(
     pack => { fill => 'x', side => 'top', pad => 10 },   
     owner => $window,
     syncPaint => 1,
+    onChange => sub { verify_zip_file(shift) },
 );
 
 my $install_dir_label = Prima::Label->create(
@@ -173,13 +174,32 @@ sub open_zip_file {
     }
 }
 
+sub verify_zip_file {
+    my $self = shift;
+
+    $zip_file = $self->text;
+
+    if (-e $zip_file) {
+        $self->color(cl::Black);
+        $button_install->enabled(1);
+        return 1;
+    } else {
+        $self->color(cl::LightRed);
+        $button_install->enabled(0);
+        return 0;
+    }
+
+}
+
 sub verify_install_dir {
     my $self = shift;
 
-    my $dir = $self->text;
-    if (-e $dir) {
-        if (-d $dir) {
-            my $exe_file = File::Spec->catfile($dir, 'GordonsReloadingTool.exe');
+    $install_dir = $self->text;
+    $installed_version = 0;
+
+    if (-e $install_dir) {
+        if (-d $install_dir) {
+            my $exe_file = File::Spec->catfile($install_dir, 'GordonsReloadingTool.exe');
             if (-e $exe_file) {
                 $button_shortcuts->enabled(1);
 
@@ -187,6 +207,7 @@ sub verify_install_dir {
                     $installed_version = substr($version, rindex($version, '.') + 1);
                 }
                 if ($installed_version) {
+                    $button_shortcuts->enabled(1);
                     $status_text->text(sprintf('Version %s is installed', $installed_version));
                     $status_text->color(cl::Black);
                 } else {
@@ -219,6 +240,8 @@ sub install {
     $button_install->enabled(0);
     $button_install->repaint();
     
+    verify_install_dir($install_dir_text);
+
     if ($zip_file) {
         chomp($zip_file);
         if ($zip_file =~ m!gordonsreloadingtool\-\d+\.(\d+)\-.*?zip$!msxi) {
@@ -283,12 +306,12 @@ sub install {
                             $status_text->text(sprintf('Installation successful'));                
                             $status_text->color(cl::Black);
                             $status_text->repaint();
-                            $button_shortcuts->enabled(0);
+                            $button_shortcuts->enabled(1);
                             return 1;
                         } else {
                             $status_text->text(sprintf('Error while installing. Please try again.'));                
                             $status_text->color(cl::LightRed);
-                            $button_install->enabled(1);
+                            $button_install->enabled(0);
                         }
 
                     } else {
