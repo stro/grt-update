@@ -307,6 +307,8 @@ sub install {
                             $status_text->color(cl::Black);
                             $status_text->repaint();
                             $button_shortcuts->enabled(1);
+
+                            $config->{_}->{'InstallDir'} = $install_dir;
                             return 1;
                         } else {
                             $status_text->text(sprintf('Error while installing. Please try again.'));                
