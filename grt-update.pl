@@ -27,7 +27,7 @@ use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.003';
+my $VERSION = '1.004';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
