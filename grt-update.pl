@@ -27,7 +27,7 @@ use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.004';
+my $VERSION = '1.005';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
@@ -123,7 +123,7 @@ my $button_exit = Prima::Button->create(
     text     => 'Exit',
     pack => { fill => 'x', side => 'top', pad => 10 },
     owner => $window,
-    onClick  => sub { $::application-> close },
+    onClick  => sub { exit_program(shift) },
 );
 
 # Initial check of install dir, need to have status. Buttons should be declared before it runs.
@@ -131,10 +131,16 @@ verify_install_dir($install_dir_text);
 
 run Prima;
 
-sub exit_program {
+sub save_config {
     my $self = shift;
     $config->write($config_file, 'utf8');
-    return $self->close();
+    return 1;
+}
+
+sub exit_program {
+    my $self = shift;
+    save_config();
+    return $::application->close();
 }
 
 sub about_message {
@@ -309,6 +315,7 @@ sub install {
                             $button_shortcuts->enabled(1);
 
                             $config->{_}->{'InstallDir'} = $install_dir;
+                            save_config();
                             return 1;
                         } else {
                             $status_text->text(sprintf('Error while installing. Please try again.'));                
