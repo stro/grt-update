@@ -27,7 +27,7 @@ use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.005';
+my $VERSION = '1.006';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
@@ -128,6 +128,7 @@ my $button_exit = Prima::Button->create(
 
 # Initial check of install dir, need to have status. Buttons should be declared before it runs.
 verify_install_dir($install_dir_text);
+guess_installation_file($install_dir_text, $zip_file_text);
 
 run Prima;
 
@@ -352,4 +353,20 @@ sub create_shortcuts {
     $link->Close();
 
     return 1;
+}
+
+sub guess_installation_file {
+    my ($install_dir_text, $zip_file_text) = @_;
+
+    my $download_dir = $config->{_}->{'DefaultOpenDir'};
+
+    if (opendir my $DIR, $download_dir) {
+        my @files = sort { lc $b cmp lc $a } grep { /^gordonsreloadingtool.*?\.zip$/si } readdir $DIR;
+        closedir $DIR;
+
+        if (my $zip_file = shift @files) {
+            $zip_file_text->text(File::Spec->catfile($download_dir, $zip_file));
+            verify_zip_file($zip_file_text);
+        }
+    }
 }
