@@ -4,12 +4,11 @@ use strict;
 use warnings;
 use 5.010;
 
-use Archive::Zip;
-
+use Archive::Zip 1.68;
 use Config::Tiny;
-
 use Cwd;
 use File::Spec;
+use File::Temp;
 
 use Prima;
 use Prima::Application;
@@ -27,8 +26,10 @@ use Win32::Shortcut;
 
 use Prima::sys::win32::FileDialog;
 
-my $VERSION = '1.006';
-my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://trouchelle.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
+my $VERSION = '1.007';
+my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://sttek.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
+
+my $READ_BUFFER_LENGTH = 16 * 1024; # Multi-part buffer
 
 my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
 
@@ -268,6 +269,41 @@ sub install {
                     $button_install->enabled(1);
                     $button_install->repaint();
                 } else {
+                    # Check for multi-part files
+                    my $mp = substr($zip_file, 0, -2) . '01';
+                    if (-e $mp) {
+                        $status_text->text(sprintf('Assembling multi-part file...'));
+                        my $temp_file = File::Temp->new(UNLINK => 0, SUFFIX => '.zip');
+                        my @files;
+                        foreach my $i (1 .. 9) {
+                            $mp = substr($zip_file, 0, -2) . '0' . $i;
+                            if (-e $mp) {
+                                push @files, $mp;
+                            } else {
+                                last;
+                            }
+                        }
+                        push @files, $zip_file;
+
+                        foreach my $file (@files) {
+                            if (open(my $F, '<', $file)) {
+                                binmode $F;
+                                my $buffer = '';
+                                while (sysread($F, $buffer, $READ_BUFFER_LENGTH)) {
+                                    print $temp_file $buffer;
+                                }
+                                close $F;
+                            } else {
+                                $status_text->text(sprintf('Cannot read file: %s (%s)', $file, $!));
+                                $status_text->color(cl::LightRed);
+                                $button_install->enabled(1);
+                                $button_install->repaint();
+                            }
+                        }
+
+                        $zip_file = $temp_file->filename;
+                    }
+
                     $status_text->text(sprintf('Reading installation file...'));
                     $status_text->color(cl::Black);
                     $status_text->repaint();
