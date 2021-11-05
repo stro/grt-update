@@ -5,7 +5,6 @@ use warnings;
 use 5.010;
 
 use Archive::Zip 1.68;
-use Archive::SevenZip;
 use Config::Tiny;
 use Cwd;
 use File::Path;
