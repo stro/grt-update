@@ -1,14 +1,17 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 use strict;
 use warnings;
 use 5.010;
 
 use Archive::Zip 1.68;
+use Archive::SevenZip;
 use Config::Tiny;
 use Cwd;
+use File::Path;
 use File::Spec;
 use File::Temp;
+use Module::Load;
 
 use Prima;
 use Prima::Application;
@@ -20,13 +23,15 @@ use Prima::Dialog::FileDialog;
 
 my $is_Win = $^O eq 'MSWin32';
 
-use Win32::File::VersionInfo;
-use Win32::Process::List;
-use Win32::Shortcut;
+if ($is_Win) {
+    load Win32::File::VersionInfo;
+    load Win32::Process::List;
+    load Win32::Shortcut;
 
-use Prima::sys::win32::FileDialog;
+    load Prima::sys::win32::FileDialog;
+}
 
-my $VERSION = '1.007';
+my $VERSION = '1.008';
 my $about_message = sprintf("GordonReloadingTool updater.\nVersion %s.\n\nCopyright (c) 2021 Sergiy Trushel http://sttek.com/\n\nhttps://github.com/stro/grt-update", $VERSION);
 
 my $READ_BUFFER_LENGTH = 16 * 1024; # Multi-part buffer
@@ -35,8 +40,13 @@ my $config_file = File::Spec->catfile(Cwd::getcwd, 'grt-update.cfg');
 
 my $config = Config::Tiny->read($config_file, 'utf8') // Config::Tiny->new();
 
-$config->{_}->{'DefaultOpenDir'} //= File::Spec->catfile($ENV{'USERPROFILE'}, 'Downloads');
-$config->{_}->{'InstallDir'} //= File::Spec->catfile($ENV{'LOCALAPPDATA'}, 'GordonsReloadingTool');
+if ($is_Win) {
+    $config->{_}->{'DefaultOpenDir'} //= File::Spec->catfile($ENV{'USERPROFILE'}, 'Downloads');
+    $config->{_}->{'InstallDir'} //= File::Spec->catfile($ENV{'LOCALAPPDATA'}, 'GordonsReloadingTool');
+} else {
+    $config->{_}->{'DefaultOpenDir'} //= File::Spec->catfile($ENV{'HOME'}, 'Downloads');
+    $config->{_}->{'InstallDir'} //= File::Spec->catfile($ENV{'HOME'}, 'opt', 'GordonsReloadingTool');
+}
 
 $config->write($config_file, 'utf8');
 
@@ -53,7 +63,7 @@ my $installed_version = 0;
 
 my $window = Prima::MainWindow->new(
     text     => sprintf('GordonReloadingTool updater V%s', $VERSION),
-    size     => [ 600, 250],
+    size     => [ 600, $is_Win ? 250 : 275],
     menuItems => [
                 [ '~File' => [
                         ['~Open ZIP File', 'Ctrl+O', '^O', sub { open_zip_file(shift) }],
@@ -118,6 +128,10 @@ my $button_shortcuts = Prima::Button->create(
     onClick => sub { create_shortcuts(shift) },
     enabled => 0,
     syncPaint => 1,
+    $is_Win ?
+        () :
+        ( visible => 0, size => [0, 0])
+    ,
 );
 
 my $button_exit = Prima::Button->create(
@@ -162,8 +176,9 @@ sub open_zip_file {
     my @params = (
         directory => $config->{_}->{'DefaultOpenDir'},
         filter => [
-                ['GRT Files' => 'Gordons*.zip'],
+                ['GRT Files' => 'Gordons*.*z*'],
                 ['ZIP Files' => '*.zip'],
+                ['7Z Files' => '*.7z'],
                 ['All' => '*']
         ]
     );
@@ -207,27 +222,33 @@ sub verify_install_dir {
 
     if (-e $install_dir) {
         if (-d $install_dir) {
-            my $exe_file = File::Spec->catfile($install_dir, 'GordonsReloadingTool.exe');
-            if (-e $exe_file) {
-                $button_shortcuts->enabled(1);
-
-                if (my $version = GetFileVersionInfo($exe_file)->{'FileVersion'}) {
-                    $installed_version = substr($version, rindex($version, '.') + 1);
-                }
-                if ($installed_version) {
+            if ($is_Win) {
+                my $exe_file = File::Spec->catfile($install_dir, 'GordonsReloadingTool.exe');
+                if (-e $exe_file) {
                     $button_shortcuts->enabled(1);
-                    $status_text->text(sprintf('Version %s is installed', $installed_version));
-                    $status_text->color(cl::Black);
+
+                    if (my $version = Win32::File::VersionInfo::GetFileVersionInfo($exe_file)->{'FileVersion'}) {
+                        $installed_version = substr($version, rindex($version, '.') + 1);
+                    }
+                    if ($installed_version) {
+                        $button_shortcuts->enabled(1);
+                        $status_text->text(sprintf('Version %s is installed', $installed_version));
+                        $status_text->color(cl::Black);
+                    } else {
+                        $status_text->text(sprintf('Cannot determine version of %s', $exe_file));
+                        $status_text->color(cl::LightRed);
+                    }
                 } else {
-                    $status_text->text(sprintf('Cannot determine version of %s', $exe_file));
+                    $button_shortcuts->enabled(0);
+                    $status_text->text('Installation path is not empty, but has no installed version, proceed with caution');
                     $status_text->color(cl::LightRed);
                 }
             } else {
-                $button_shortcuts->enabled(0);
-                $status_text->text('Installation path is not empty, but has no installed version, proceed with caution');
-                $status_text->color(cl::LightRed);
+                # Can't check installed version on Linux
+                    $button_shortcuts->enabled(0);
+                    $status_text->text('Cannot test existing installation version on Linux, proceed with caution');
+                    $status_text->color(cl::LightRed);
             }
-
         } else {
             $button_shortcuts->enabled(0);
             $status_text->text('Installation path is an existing file; cannot install');
@@ -247,12 +268,12 @@ sub install {
 
     $button_install->enabled(0);
     $button_install->repaint();
-    
+
     verify_install_dir($install_dir_text);
 
     if ($zip_file) {
         chomp($zip_file);
-        if ($zip_file =~ m!gordonsreloadingtool\-\d+\.(\d+)\-.*?zip$!msxi) {
+        if ($zip_file =~ m!gordonsreloadingtool\-\d+\.(\d+)\-.*?(zip|7z)$!msxi) {
             my $zip_version = $1;
             if ($zip_version == $installed_version) {
                 $status_text->text(sprintf('Version %s is already installed', $installed_version));
@@ -262,17 +283,30 @@ sub install {
                 $status_text->color(cl::LightRed);
             } else {
                 # Check if GRT is running
-                my $pl = Win32::Process::List->new();
-                if (my $pid = $pl->GetProcessPid('GordonsReloadingTool')) {
+                my $pid;
+                if ($is_Win and $pid = Win32::Process::List->new()->GetProcessPid('GordonsReloadingTool')) {
                     $status_text->text(sprintf('GordonsReloadingTool.exe is running (PID=%d), please exit the program first', $pid));
                     $status_text->color(cl::LightRed);
                     $button_install->enabled(1);
                     $button_install->repaint();
                 } else {
+                    # Check if installation dir is writable
+                    unless (-d $install_dir) {
+                        unless (eval { File::Path::make_path($install_dir) }) {
+                            $status_text->text(sprintf('Cannot create the installation directory. Check permissions.'));
+                            $status_text->color(cl::LightRed);
+                            $button_install->enabled(1);
+                            $button_install->repaint();
+                            return 0;
+                        }
+                    }
+
+                    my $is_zip = 1;
                     # Check for multi-part files
                     my $mp = substr($zip_file, 0, -2) . '01';
                     if (-e $mp) {
                         $status_text->text(sprintf('Assembling multi-part file...'));
+                        $status_text->color(cl::Black);
                         my $temp_file = File::Temp->new(UNLINK => 0, SUFFIX => '.zip');
                         my @files;
                         foreach my $i (1 .. 9) {
@@ -304,9 +338,30 @@ sub install {
                         $zip_file = $temp_file->filename;
                     }
 
+                    if ($zip_file =~ m!\.7z$!msx) {
+                        # Reassemble 7z file as ZIP. Could be optimized but 7z sucks and I don't want anything to do with it.
+                        # It's a solution for a problem that shouldn't even exist.
+                        undef $is_zip;
+
+                        # Extract to temporaty directory
+                        my $tmp_dir = File::Temp->newdir(UNLINK => 0);
+                        $status_text->text(sprintf('Extracting from 7z. No guarantees. 7z sucks. Use zip files instead.'));
+                        system('7z', 'x', '-y', '-bb0', $zip_file, sprintf('-o%s', $tmp_dir), '-spe', '-aoa');
+
+                        my $temp_file = File::Temp->new(UNLINK => 0, SUFFIX => '.zip');
+                        unlink $temp_file;
+                        my $current_dir = Cwd::getcwd();
+                        chdir $tmp_dir;
+                        my $zip_command = join(' ', 'zip', '-0rm', $temp_file->filename, '*');
+                        system($zip_command);
+                        chdir $current_dir;
+                        $zip_file = $temp_file->filename;
+                    }
+
                     $status_text->text(sprintf('Reading installation file...'));
                     $status_text->color(cl::Black);
                     $status_text->repaint();
+
                     my $zip = Archive::Zip->new();
                     if ($zip->read($zip_file) == Archive::Zip::AZ_OK) {
                         my $root_dir = shift(@{[$zip->members]})->fileName;
@@ -338,6 +393,7 @@ sub install {
                         }
 
                         if ($zip->extractTree($root_dir => $install_dir) == Archive::Zip::AZ_OK) {
+
                             # Restrore configuration files
                             foreach my $name (@configuration_files, @report_files) {
                                 my $cfg = File::Spec->catfile($install_dir, $name);
@@ -346,7 +402,15 @@ sub install {
                                     File::Copy::move($cfg_bak => $cfg);
                                 }
                             }
-                            $status_text->text(sprintf('Installation successful'));                
+
+                            unless ($is_Win) {
+                                # Fix permissions
+                                chmod(0755 => File::Spec->catfile($install_dir, 'GordonsReloadingTool'));
+                            }
+                            $status_text->text(sprintf('Installation successful'));
+                            unless ($is_zip) {
+                                $status_text->text(sprintf('Extraction complete. No guarantees it worked. Use ZIP files for installation.'));
+                            }
                             $status_text->color(cl::Black);
                             $status_text->repaint();
                             $button_shortcuts->enabled(1);
@@ -355,11 +419,11 @@ sub install {
                             save_config();
                             return 1;
                         } else {
-                            $status_text->text(sprintf('Error while installing. Please try again.'));                
+                            $status_text->text(sprintf('Error while installing. Please try again.'));
                             $status_text->color(cl::LightRed);
                             $button_install->enabled(0);
+                            return 0;
                         }
-
                     } else {
                         $status_text->text(sprintf('ZIP file error. Please select another file'));
                         $status_text->color(cl::LightRed);
@@ -397,7 +461,7 @@ sub guess_installation_file {
     my $download_dir = $config->{_}->{'DefaultOpenDir'};
 
     if (opendir my $DIR, $download_dir) {
-        my @files = sort { lc $b cmp lc $a } grep { /^gordonsreloadingtool.*?\.zip$/si } readdir $DIR;
+        my @files = sort { lc $b cmp lc $a } grep { /^gordonsreloadingtool.*?\.(zip|7z)$/si } readdir $DIR;
         closedir $DIR;
 
         if (my $zip_file = shift @files) {
