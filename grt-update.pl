@@ -64,6 +64,7 @@ my $installed_version = 0;
 my $window = Prima::MainWindow->new(
     text     => sprintf('GordonReloadingTool updater V%s', $VERSION),
     size     => [ 600, $is_Win ? 250 : 275],
+    font     => { size => 8 },
     menuItems => [
                 [ '~File' => [
                         ['~Open ZIP File', 'Ctrl+O', '^O', sub { open_zip_file(shift) }],
