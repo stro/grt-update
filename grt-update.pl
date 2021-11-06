@@ -23,6 +23,7 @@ use Prima::Dialog::FileDialog;
 my $is_Win = $^O eq 'MSWin32';
 
 if ($is_Win) {
+    load Win32;
     load Win32::File::VersionInfo;
     load Win32::Process::List;
     load Win32::Shortcut;
@@ -341,20 +342,22 @@ sub install {
                         # Reassemble 7z file as ZIP. Could be optimized but 7z sucks and I don't want anything to do with it.
                         # It's a solution for a problem that shouldn't even exist.
                         undef $is_zip;
+                        my $sz_command  = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '', 'inc', 'contrib', '7z.exe') : '7z';
+                        my $zip_command = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '', 'inc', 'contrib', 'zip.exe') : 'zip';
 
                         # Extract to temporaty directory
                         my $tmp_dir = File::Temp->newdir(UNLINK => 0);
                         $status_text->text(sprintf('Extracting from 7z. No guarantees. 7z sucks. Use zip files instead.'));
-                        system('7z', 'x', '-y', '-bb0', $zip_file, sprintf('-o%s', $tmp_dir), '-spe', '-aoa');
+                        system($sz_command, 'x', '-y', '-bb0', $zip_file, sprintf('-o%s', $tmp_dir), '-spe', '-aoa');
 
-                        my $temp_file = File::Temp->new(UNLINK => 0, SUFFIX => '.zip');
-                        unlink $temp_file;
-                        my $current_dir = Cwd::getcwd();
-                        chdir $tmp_dir;
-                        my $zip_command = join(' ', 'zip', '-0rm', $temp_file->filename, '*');
-                        system($zip_command);
-                        chdir $current_dir;
-                        $zip_file = $temp_file->filename;
+                        # On Win, it's impossible to unlink the open file, so use File::Temp to create a .zi file
+                        # but use .zip instead
+                        my $temp_file = File::Temp->new(UNLINK => 1, SUFFIX => '.zi');
+                        my $temp_file_name = $temp_file->filename . 'p';
+
+                        my $zip_params = join(' ', $zip_command, '-0rm', $temp_file_name, $tmp_dir);
+                        system($zip_params);
+                        $zip_file = $temp_file_name;
                     }
 
                     $status_text->text(sprintf('Reading installation file...'));
@@ -363,7 +366,9 @@ sub install {
 
                     my $zip = Archive::Zip->new();
                     if ($zip->read($zip_file) == Archive::Zip::AZ_OK) {
-                        my $root_dir = shift(@{[$zip->members]})->fileName;
+                        my $root_id = $is_zip ? 0 : 1; # Created zip file has one extra member
+                        my $root_dir = @{[$zip->members]}[$root_id]->fileName;
+
                         $status_text->text(sprintf('Installing... Please wait.'));
                         $status_text->color(cl::Green);
                         $status_text->repaint();
@@ -408,7 +413,7 @@ sub install {
                             }
                             $status_text->text(sprintf('Installation successful'));
                             unless ($is_zip) {
-                                $status_text->text(sprintf('Extraction complete. No guarantees it worked. Use ZIP files for installation.'));
+                                $status_text->text(sprintf('Extraction complete. No guarantees it worked. Use ZIP files for installation, 7z sucks.'));
                             }
                             $status_text->color(cl::Black);
                             $status_text->repaint();

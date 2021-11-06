@@ -11,6 +11,12 @@
   -l libtiff-5__.dll   ^
   -l liblzma-5__.dll   ^
   -l libpng16-16__.dll ^
+  -M Win32                         ^
+  -M Win32::File::VersionInfo      ^
+  -M Win32::Process::List          ^
+  -M Win32::Shortcut               ^
+  -M Prima::sys::win32::FileDialog ^
+  -a inc/contrib;contrib           ^
   -a %SITELIBEXP%/Prima/sysimage.gif;Prima/sysimage.gif                     ^
   -a %SITELIBEXP%/Prima/sys/win32/sysimage.gif;Prima/sys/win32/sysimage.gif ^
   -o grt-update.exe grt-update.pl
@@ -24,9 +30,15 @@
   -l libtiff-5__.dll   ^
   -l liblzma-5__.dll   ^
   -l libpng16-16__.dll ^
+  -M Win32                         ^
+  -M Win32::File::VersionInfo      ^
+  -M Win32::Process::List          ^
+  -M Win32::Shortcut               ^
+  -M Prima::sys::win32::FileDialog ^
+  -a inc/contrib;contrib           ^
   -a %SITELIBEXP%/Prima/sysimage.gif;Prima/sysimage.gif                     ^
   -a %SITELIBEXP%/Prima/sys/win32/sysimage.gif;Prima/sys/win32/sysimage.gif ^
   -o grt-update-debug.exe grt-update.pl
 
-@zip -9 grt-update-%GRTU_VERSION%.zip grt-update.exe
-@zip -9 grt-update-%GRTU_VERSION%-debug.zip grt-update-debug.exe
+@inc\contrib\zip -9 grt-update-%GRTU_VERSION%.zip grt-update.exe
+@inc\contrib\zip -9 grt-update-%GRTU_VERSION%-debug.zip grt-update-debug.exe
