@@ -411,6 +411,7 @@ sub install {
                             unless ($is_Win) {
                                 # Fix permissions
                                 chmod(0755 => File::Spec->catfile($install_dir, 'GordonsReloadingTool'));
+                                chmod(0755 => File::Spec->catfile($install_dir, 'plugins/GRTLab/plugin-grtlab'));
                             }
                             $status_text->text(sprintf('Installation successful'));
                             unless ($is_zip) {
