@@ -343,8 +343,8 @@ sub install {
                         # Reassemble 7z file as ZIP. Could be optimized but 7z sucks and I don't want anything to do with it.
                         # It's a solution for a problem that shouldn't even exist.
                         undef $is_zip;
-                        my $sz_command  = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '', 'inc', 'contrib', '7z.exe') : '7z';
-                        my $zip_command = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '', 'inc', 'contrib', 'zip.exe') : 'zip';
+                        my $sz_command  = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '.', 'inc', 'contrib', '7z.exe') : '7z';
+                        my $zip_command = $is_Win ? File::Spec->catfile($ENV{'PAR_TEMP'} // '.', 'inc', 'contrib', 'zip.exe') : 'zip';
 
                         # Extract to temporaty directory
                         my $tmp_dir = File::Temp->newdir(UNLINK => 0);
